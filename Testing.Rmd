@@ -1,0 +1,255 @@
+---
+title: "Stats Testing"
+author: "Junduo Dong"
+date: "1/4/2020"
+output: html_document
+---
+
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+
+This is the R markdown file for Beijing Project <br />
+One of the purpose of this file is to evaluate model performance through Linear Regression, Backward selection and Random Forest <br />
+More importantly, this file is going to solve the problem why Date-on-Market (DOM) is unpredictable according to two side t-test, paired t-test through different time period and model summarization <br />
+
+
+```{r setup, include=FALSE}
+# Clear plots
+if(!is.null(dev.list())) dev.off()
+
+# Clear console
+cat("\014") 
+
+# Clean workspace
+rm(list=ls())
+
+```
+
+```{r  message=FALSE,warning=FALSE}
+# Set Working Directory
+setwd("~/Desktop/Conestoga_college_F19/PROG8420-19F-Sec1-Programming for Big Data/Programming_in_big_data/Project")
+# Load Cleaned Data
+data <- read.csv("clean_data.csv")
+# Remove Uncessary Column
+data$X <- NULL
+```
+
+```{r  message=FALSE,warning=FALSE}
+# Load Packages
+
+if(!require(dplyr)){install.packages("dplyr")}
+library("dplyr")
+
+if(!require(randomForest)){install.packages("randomForest")}
+library("randomForest")
+
+if(!require(corrgram)){install.packages("corrgram")}
+library("corrgram")
+
+if(!require(ggplot2)){install.packages("ggplot2")}
+library("ggplot2")
+```
+
+```{r  message=FALSE,warning=FALSE}
+# sampling
+sample_data <- sample_n(data,5000)
+shapiro.test(sample_data$Total.price)
+```
+
+```{r include=FALSE,message=FALSE,warning=FALSE}
+# check spearman correlation coefficient 
+corr <- cor(sample_data, method = "spearman")
+```
+
+```{r dpi=200,message=FALSE, warning= FALSE}
+corrgram(corr, order = TRUE, lower.panel = panel.shade,
+         upper.panel = panel.pie, text.panel = panel.txt,
+         main="Beijing house data")
+```
+
+```{r  message=FALSE,warning=FALSE}
+# Model1. Multivariate Linear Regression
+regressor <- lm(Total.price~., data = data)
+summary(regressor)
+```
+
+####  Verifying Assumptions with the baseline model
+
+1. Independence of predictors <br />
+The spearman rho value for garden and Average.price.nearby are 0.61, as well as with pool are 0.77 which is pretty high <br />
+It also shows the coefficient between graden and pool with total.price are 0.54 and 0.51 <br />
+Pool and Average.price.nearby has a correlation coefficient of 0.60 <br />
+Number of schools, number of hospitals and number of shipping malls are highly correlate, the spearman rho value suggested <br />
+The correlation coefficient between them are 0.94, 0.85 and 0.78 <br />
+building.structure_mixed are correlated with Floor, Construction.time and Elevator (0.67, 0.48, 0.74) <br />
+DOM has correlated with TradeTime_year and Followers, the coefficient is about 0.69 and 0.61 <br />
+Suprisely, the DOM has just 0.41 correlation coefficient with Total.price, let's find out more when we predicting DOM value <br />
+
+2. Distribution of Error Terms <br />
+```{r  message=FALSE,warning=FALSE}
+FitRes <- residuals(regressor)
+FitRes_sample1 <- sample(FitRes,5000)
+shapiro.test(FitRes_sample1)
+```
+The error terms seem to be not normally distributed since the p-value is so low <br />
+
+
+3. Non-AutoCorrelation and Homoscedasticity <br />
+```{r  message=FALSE,warning=FALSE}
+par(mfrow=c(2,2))
+plot(regressor)
+```
+
+Base on Residuals vs Fitted and Scale-Location, there appears to be no explicit pattern to the residuals <br />
+Therefore, there is no appearance of autocorrelation <br />
+Based on Resdials vs Leverage and Cook's Distance, there is no data point exerting under influence or leverage on the model <br />
+
+```{r  results='hide',message=FALSE,warning=FALSE}
+# Model2. Model with backward selection
+Back_regressor = step(regressor, direction = "backward", details=TRUE)
+summary(Back_regressor)
+```
+
+```{r  message=FALSE,warning=FALSE}
+par(mfrow=c(2,2))
+plot(Back_regressor)
+```
+
+
+1. Distribution of Error Terms <br />
+```{r  message=FALSE,warning=FALSE}
+DiaBackRes <- residuals(Back_regressor)
+sample = sample(DiaBackRes,5000)
+shapiro.test(sample)
+```
+The error terms seem to be not normally distributed since the p-value is so low <br />
+
+Overall, the best performance of a multvairate linear regssion can do is 0.7685 <br />
+So at this point, we will stop on tuning linear regression and try different regressor with does not rely on the assumption of normality test <br />
+
+```{r  message=FALSE,warning=FALSE}
+# Model3. Random Forest Model
+rf_fit_70pct <- randomForest(Total.price~., data = sample_data, ntree = 100, importance = TRUE)
+plot(rf_fit_70pct)
+```
+
+```{r  fig.width=10, fig.height=10,message=FALSE,warning=FALSE}
+varImpPlot(rf_fit_70pct, sort = TRUE, main = "Applicant Feature Importance")
+
+```
+
+
+### Date-On-Market (DOM) 
+```{r  message=FALSE,warning=FALSE}
+par(mfrow=c(1,1))
+attach(sample_data)
+```
+
+```{r  message=FALSE,warning=FALSE}
+ggplot(sample_data, aes(x = TradeTime_year, y = DOM)) +
+  geom_point() +
+  geom_line() +
+  scale_x_continuous(breaks = seq(2010,2018,1))
+```
+
+By visualizing DOM with TradeTime_year we can see it is not a linear correlation and hard to predict <br />
+The regression score of R-square is about 0.00173 <br /> 
+
+The following test are appendix to support DOM is unpredictable using certain data without any external factors:
+
+```{r  message=FALSE,warning=FALSE}
+# Assumption: true rho value between DOM and TradeTime_year is equals to 0
+cor.test(sample_data[,3], sample_data[,42], alternative = "two.side",method = "spearman")
+```
+By looking at p-value, it suggests the overall correaltion coefficient between DOM and TradeTime_year is not equal to 0 <br />
+
+Therefore, tradetime_year can be an important factor of DOM <br />
+But we are going to use paired t-test to see if the average DOM value are the same during the following period of time: <br />
+2010-2015 vs 2016 <br />
+2016 vs 2017 <br />
+
+```{r  message=FALSE,warning=FALSE}
+# sample_data %>% select(DOM) %>% filter(sample_data$NewTradeTime_year == 2018)
+# There are only 3 values for year of 2018, so we won't include those in t-test
+```
+
+```{r  message=FALSE,warning=FALSE}
+# re-categorise with multiple conditions
+sample_data <- sample_data %>%
+                  mutate(NewTradeTime_year = as.factor(ifelse((TradeTime_year == 2010)|
+                                                                (TradeTime_year == 2011)|
+                                                                (TradeTime_year == 2012)|
+                                                                (TradeTime_year == 2013)|
+                                                                (TradeTime_year == 2014)|
+                                                                (TradeTime_year == 2015),'2010-2015', TradeTime_year)))
+```
+
+```{r  message=FALSE,warning=FALSE}
+# t-test1: test period between 2010-2015 vs 2016
+d1 <- sample_data %>% select(DOM) %>% filter(sample_data$NewTradeTime_year == "2010-2015") %>% sample_n(1450)
+d2 <- sample_data %>% select(DOM) %>% filter(sample_data$NewTradeTime_year == "2016") %>% sample_n(1450)
+data_test1 <- cbind(d1,d2)
+names(data_test1)[1] <- "Year_2010_2015"
+names(data_test1)[2] <- "Year_2016"
+
+sapply(data_test1[c("Year_2010_2015","Year_2016")], function(x) (c(mean=mean(x),sd=sd(x))))
+```
+
+```{r  message=FALSE,warning=FALSE}
+with(data_test1, t.test(Year_2010_2015,Year_2016, paired = TRUE))
+```
+The p-value is less than 0.01, so we reject the null hypothesis that the true difference in means of DOM is equal to 0 through 2010 to 2015 and year of 2016 <br />
+
+```{r  message=FALSE,warning=FALSE}
+# t-test2: test period between 2016 vs 2017
+d3 <- sample_data %>% select(DOM) %>% filter(sample_data$NewTradeTime_year == "2017") %>% sample_n(1300)
+d4 <- sample_data %>% select(DOM) %>% filter(sample_data$NewTradeTime_year == "2016") %>% sample_n(1300)
+data_test2 <- cbind(d3,d4)
+names(data_test2)[1] <- "Year_2017"
+names(data_test2)[2] <- "Year_2016"
+
+sapply(data_test2[c("Year_2017","Year_2016")], function(x) (c(mean=mean(x),sd=sd(x))))
+```
+
+```{r  message=FALSE,warning=FALSE}
+with(data_test2, t.test(Year_2017,Year_2016, paired = TRUE))
+```
+The p-value is less than 0.01, so we reject the null hypothesis that the true difference in means of DOM is equal to 0 in 2016 and 2017 <br />
+
+So why the value of DOM is still unpredictable by using trade year from 2010 to 2015? <br />
+let's try to compare year 2012 and 2013 <br />
+```{r  message=FALSE,warning=FALSE}
+# t-test3: test period between 2012 vs 2013
+d5 <- sample_data %>% select(DOM) %>% filter(sample_data$TradeTime_year == 2013) %>% sample_n(150)
+d6 <- sample_data %>% select(DOM) %>% filter(sample_data$TradeTime_year == 2012) %>% sample_n(150)
+data_test3 <- cbind(d5,d6)
+names(data_test3)[1] <- "Year_2013"
+names(data_test3)[2] <- "Year_2012"
+
+sapply(data_test3[c("Year_2013","Year_2012")], function(x) (c(mean=mean(x),sd=sd(x))))
+```
+
+```{r  message=FALSE,warning=FALSE}
+with(data_test3, t.test(Year_2013,Year_2012, paired = TRUE))
+```
+The p-value is greater than 0.05, so it suggests we can accept the null hypothesis at this point <br />
+
+
+```{r  message=FALSE,warning=FALSE}
+# let's see how linear model fit when we fliter data only from year 2010 to 2015
+lm_data <- sample_data %>% select(everything()) %>% filter(sample_data$NewTradeTime_year == '2010-2015')
+lm_data$NewTradeTime_year <- NULL
+lm_mod <- lm(DOM~., data = lm_data)
+summary(lm_mod)
+```
+
+Now the reason why R-squared is just 0.01623 is because of the external factors again <br />
+During 2010 to 2015, the range of average DOM is from 1.00 to 1.40 <br />
+which means whatever property is it, once it post on the internet, it can be sold less than 2 days <br />
+So it does not matter with any predictors we have in this data, it is still unpredictable <br />
+
+
+
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
