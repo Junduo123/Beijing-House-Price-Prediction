@@ -4,6 +4,8 @@ Nov 2019 – Dec 2019
 
 ## Project description
 The purpose of this project is to analysis key features for Beijing house sold price and date on market (DOM). The data is from the China's largest second-hand housing website, it contains more than 35 features and 310 thousands records. The prediction is base on regression model of historical transaction data through 2008 to 2018 in Beijing.
+- `Team name`: Team Hortons
+- `Team members`: [Junduo Dong](https://www.linkedin.com/in/junduo-dong/), [Jack Shi](https://www.linkedin.com/in/yue-shi-a921301a2/)
 
 ## Analytics Roadmap
 - Exploratory analysis with distribution and correlation between features to check skewness and correlation coefficient between features, in order to define outliers and collinearity.
